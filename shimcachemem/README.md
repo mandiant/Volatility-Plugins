@@ -10,14 +10,14 @@ This plugin parses the shim cache directly from the module or process containing
 > All development and testing was performed using Python 2.7.6 (x64).
 
 Install the following packages:
-* [Python 2.7.6 (x64)](https://www.python.org/ftp/python/2.7.5/python-2.7.5.amd64.msi)
-* [Volatility 2.4](http://downloads.volatilityfoundation.org/releases/2.4/volatility-2.4.win32.exe)
+* Python 2.7.6 (x64)
+* Volatility 2.4
 * Shim Cache Memory Plugin
   * Copy the plugin file "shimcachemem.py" to the Volatility plugins folder located in volatility/plugins
 
 If working with Windows 8+, the following additional Python modules are required:
-  * [pycrypto](http://www.voidspace.org.uk/downloads/pycrypto26/pycrypto-2.6.win-amd64-py2.7.exe)
-  * [distorm3](https://github.com/gdabah/distorm/releases/download/v3.3.0/py-distorm3-3.3.0.win-amd64.exe)
+  * pycrypto
+  * distorm3
 
 See [this volatility page](https://github.com/volatilityfoundation/volatility/wiki/Windows-8-2012) for more information on why pycrypto and distorm3 are needed for Windows 8+ analysis.
 
