@@ -3,11 +3,13 @@
 #
 # Authors:
 #   Volatility Plugin Development
-#   * Fred House (fred.house@mandiant.com) - Mandiant, a FireEye Company
+#   * Fred House - Mandiant, a FireEye Company
+#                  Twitter: @0xF2EDCA5A
 #   
-#   Windows Shimcache Reverse Engineering
-#   * Andrew Davis (andrew.davis@mandiant.com) - Mandiant, a FireEye Company
-#   * Claudiu Teodorescu (claudiu.teodorescu@fireeye.com) - FireEye Inc.
+#   Windows Shimcache Analysis
+#   * Andrew Davis - Mandiant, a FireEye Company
+#   * Claudiu Teodorescu - FireEye Inc.
+#                        - Twitter: @cteo13
 #
 # Purpose:  This project contains a plugin for Volatility 2.4 that parses the 
 #           Windows Application Compatibility Database (aka, ShimCache) from 
