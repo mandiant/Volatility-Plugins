@@ -50,7 +50,7 @@ The plugin supports the following options:
 ```
 > python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin imageinfo
 
-Volatility Foundation Volatility Framework 2.4
+Volatility Foundation Volatility Framework 2.5
 Determining profile based on KDBG search...
 
           Suggested Profile(s) : WinXPSP2x86, WinXPSP3x86 (Instantiated with WinXPSP2x86)
@@ -72,7 +72,7 @@ Determining profile based on KDBG search...
 ```
 > python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin --profile=WinXPSP2x86 --kdbg=0x8054cde0 --dtb=0x39000 modules
 
-Volatility Foundation Volatility Framework 2.4
+Volatility Foundation Volatility Framework 2.5
 Offset(V)  Name                 Base             Size File
 ---------- -------------------- ---------- ---------- ----
 0x823fc3a0 ntoskrnl.exe         0x804d7000   0x216680 \WINDOWS\system32\ntoskrnl.exe
@@ -104,7 +104,7 @@ Order Last Modified         Last Update           Exec  File Size  File Path
 ```
 > python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw imageinfo
 
-Volatility Foundation Volatility Framework 2.4
+Volatility Foundation Volatility Framework 2.5
 Determining profile based on KDBG search...
 
           Suggested Profile(s) : Win2012R2x64, Win8SP0x64, Win8SP1x64, Win2012x64 (Instantiated with Win8SP1x64)
@@ -126,7 +126,7 @@ Determining profile based on KDBG search...
 ```
 > python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 kdbgscan
 
-Volatility Foundation Volatility Framework 2.4
+Volatility Foundation Volatility Framework 2.5
 **************************************************
 Instantiating KDBG using: Unnamed AS Win2012x64 (6.2.9201 64bit)
 Offset (V)                    : 0xf801a191ca30
@@ -158,7 +158,7 @@ Note that the PsActiveProcessHead and PsLoadedModuleList values above list 34 pr
 ```
 > python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 --kdbg=0xf801a185b9b0 --dtb=0x1a7000 modules
 
-Volatility Foundation Volatility Framework 2.4
+Volatility Foundation Volatility Framework 2.5
 Offset(V)          Name                 Base                             Size File
 ------------------ -------------------- ------------------ ------------------ ----
 0xffffe000000555d0 ntoskrnl.exe         0xfffff801a1686000           0x783000 \SystemRoot\system32\ntoskrnl.exe
