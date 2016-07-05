@@ -1,9 +1,9 @@
 ## Overview
 
-This project contains a plugin for Volatility 2.4 that parses the Windows Application Compatibility Database (aka, ShimCache) from memory. Most forensic tools that parse the shim cache rely on the cache stored in the Windows registry. The cache in the registry is only updated when a system is shutdown so this approach has the disadvantage of only parsing cache entries 
+This project contains a plugin for Volatility 2.5 that parses the Windows Application Compatibility Database (aka, ShimCache) from memory. Most forensic tools that parse the shim cache rely on the cache stored in the Windows registry. The cache in the registry is only updated when a system is shutdown so this approach has the disadvantage of only parsing cache entries 
 since the last shutdown. On systems that are not rebooted regularly (e.g., production servers) an analyst must either use out-of-date shim cache data or request a system reboot.
 
-This plugin parses the shim cache directly from the module or process containing the cache, thereby providing analysts access to the most up-to-date cache. The plugin supports Windows XP SP2 through Windows 2012 R2 on both 32 and 64 bit architectures.
+This plugin parses the shim cache directly from the module or process containing the cache, thereby providing analysts access to the most up-to-date cache. The plugin supports Windows XP SP2 through Windows 10 on both 32 and 64 bit architectures.
 
 ## Installation
 
@@ -11,9 +11,10 @@ This plugin parses the shim cache directly from the module or process containing
 
 Install the following packages:
 * Python 2.7.6 (x64)
-* Volatility 2.4
+* Volatility 2.5
 * Shim Cache Memory Plugin
   * Copy the plugin file "shimcachemem.py" to the Volatility plugins folder located in volatility/plugins
+  * OR, use the Volatility "--plugins" option and point to the directory containing the plugin
 
 If working with Windows 8+, the following additional Python modules are required:
   * pycrypto
@@ -25,7 +26,7 @@ See [this volatility page](https://github.com/volatilityfoundation/volatility/wi
 
 The process is as follows:
 
-1. Run the volatility "imageinfo" plugin to determine the Volatility profile and KDBG offset.
+1. Run the volatility "imageinfo" plugin to determine the profile, KDBG offset, and DTB offset.
 2. For Windows 8+, run the volatility "kdbgscan" plugin to determine the KdCopyDataBlock offset.
 3. As a sanity check, use the results of steps 1/2 to list all modules. If this doesn't work, start over.
 4. Run the "shimcachemem" plugin using the results of steps 1 and 2.
@@ -69,7 +70,7 @@ Determining profile based on KDBG search...
 #### As a sanity check, run the volatility "modules" plugin.
 
 ```
-> python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin --profile=WinXPSP2x86 --kdbg=0x8054cde0 modules
+> python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin --profile=WinXPSP2x86 --kdbg=0x8054cde0 --dtb=0x39000 modules
 
 Volatility Foundation Volatility Framework 2.4
 Offset(V)  Name                 Base             Size File
@@ -83,16 +84,9 @@ Offset(V)  Name                 Base             Size File
 #### Run the shimcachemem plugin.
 
 ```
-> python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin --profile=WinXPSP2x86 --kdbg=0x8054cde0 shimcachemem
+> python vol.py -f D:\Projects\Volatility\WinXPSP2x86.bin --profile=WinXPSP2x86 --kdbg=0x8054cde0 --dtb=0x39000 shimcachemem
 
-Volatility Foundation Volatility Framework 2.4
-INFO    : volatility.plugins.shimcachemem: Shimcache Memory Dump
-INFO    : volatility.plugins.shimcachemem: Searching for ShimSharedMemory section handle...
-INFO    : volatility.plugins.shimcachemem:      Found ShimSharedMemory handle in winlogon.exe (628)
-INFO    : volatility.plugins.shimcachemem:      Shim section object found at (0xe15d0918) 0x068c9918
-INFO    : volatility.plugins.shimcachemem:      Shim segment found at (0xe14ef800) 0x038bd800
-INFO    : volatility.plugins.shimcachemem: Process 'winlogon.exe' (628) contains shim cache at virtual address 0x008d0000
-INFO    : volatility.plugins.shimcachemem: Shim cache magic header found at 0x008d0000 (0x06a8e000)
+Volatility Foundation Volatility Framework 2.5
 
 Order Last Modified         Last Update           Exec  File Size  File Path
 ----- --------------------- --------------------- ----- ---------- ---------
@@ -162,7 +156,7 @@ Note that the PsActiveProcessHead and PsLoadedModuleList values above list 34 pr
 #### As a sanity check, run the volatility "modules" plugin.
 
 ```
-> python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 --kdbg=0xf801a185b9b0 modules
+> python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 --kdbg=0xf801a185b9b0 --dtb=0x1a7000 modules
 
 Volatility Foundation Volatility Framework 2.4
 Offset(V)          Name                 Base                             Size File
@@ -177,29 +171,10 @@ Offset(V)          Name                 Base                             Size Fi
 #### Run the shimcachemem plugin
 
 ```
-> python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 --kdbg=0xf801a185b9b0 shimcachemem
+> python vol.py -f D:\Projects\Volatility\Win2012R2x64.raw --profile=Win2012R2x64 --kdbg=0xf801a185b9b0 --dtb=0x1a7000 shimcachemem
 
-Volatility Foundation Volatility Framework 2.4
-INFO    : volatility.plugins.shimcachemem: Shimcache Memory Dump
-INFO    : volatility.plugins.shimcachemem: Searching for '.data' section in the following kernel module(s): ahcache.sys
-INFO    : volatility.plugins.shimcachemem: Found kernel module 'ahcache.sys' at offset 0xfffff8000164c000
-INFO    : volatility.plugins.shimcachemem: Searching for .data section...
-INFO    : volatility.plugins.shimcachemem: Found .data section at 0x00003000 with size 0x10c
-INFO    : volatility.plugins.shimcachemem: Searching for 'PAGE' section in the following kernel module(s): ahcache.sys
-INFO    : volatility.plugins.shimcachemem: Found kernel module 'ahcache.sys' at offset 0xfffff8000164c000
-INFO    : volatility.plugins.shimcachemem: Searching for PAGE section...
-INFO    : volatility.plugins.shimcachemem: Found PAGE section at 0x00005000 with size 0xe8dd
-INFO    : volatility.plugins.shimcachemem: Scanning range 0xfffff8000164f000 - 0xfffff8000164f10c
-INFO    : volatility.plugins.shimcachemem: SHIM_CACHE_ENTRY candidate found at 0xffffc0000046e4b8 (v) 0x37c074b8 (p)
+Volatility Foundation Volatility Framework 2.5
 INFO    : volatility.plugins.shimcachemem: Shimcache found at 0xffffc0000046e4b8
-INFO    : volatility.plugins.shimcachemem:      _RTL_AVL_TABLE:  0xffffc0000046e450 0x37c07450
-INFO    : volatility.plugins.shimcachemem:      SHIM_CACHE:      0xffffc0000046e4b8 0x37c074b8
-INFO    : volatility.plugins.shimcachemem: Shim handle at 0xfffff8000164f0d0 (0x3b8ff0d0) points to a valid shim cache at 0xffffc0000046e4b8
-INFO    : volatility.plugins.shimcachemem: SHIM_CACHE_ENTRY candidate found at 0xffffc00000465ce8 (v) 0x371f2ce8 (p)
-INFO    : volatility.plugins.shimcachemem: Shimcache found at 0xffffc00000465ce8
-INFO    : volatility.plugins.shimcachemem:      _RTL_AVL_TABLE:  0xffffc00000465c80 0x371f2c80
-INFO    : volatility.plugins.shimcachemem:      SHIM_CACHE:      0xffffc00000465ce8 0x371f2ce8
-INFO    : volatility.plugins.shimcachemem: Shim handle at 0xfffff8000164f0e0 (0x3b8ff0e0) points to a valid shim cache at 0xffffc00000465ce8
 INFO    : volatility.plugins.shimcachemem: Shimcache found at 0xffffc00000465ce8
 
 Order Last Modified         Last Update           Exec  File Size  File Path
