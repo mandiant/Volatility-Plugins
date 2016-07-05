@@ -731,6 +731,8 @@ class ShimCacheMem(common.AbstractWindowsCommand):
                             Only available in 'text' output.",
                           action = "store_true")
 
+        # TODO: pull system/computer name out of the registry instead of asking
+        # user to specify
         config.add_option("SYSTEM_NAME",
                           default = "",
                           help = "System name to add to timeline header (only when --print_offsets is not selected)")
