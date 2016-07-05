@@ -228,6 +228,50 @@ shimcache_win8_x64_detail = {
     } ],
 }
 
+#######################################
+# Windows 10 (x86/x64)
+#######################################
+shimcache_win10_x86 = {
+    'SHIM_CACHE_ENTRY' : [ None, {
+        'ListEntry' : [0x0, ['_LIST_ENTRY']],
+        'Unknown1' : [ 0x8, ['unsigned long']],
+        'Path' : [ 0xc, ['_UNICODE_STRING']],
+        'ListEntryDetail' : [ 0x14, ['pointer', ['SHIM_CACHE_ENTRY_DETAIL']]],
+    } ],
+}
+
+shimcache_win10_x86_detail = {
+    'SHIM_CACHE_ENTRY_DETAIL' : [ None, {
+        'Unknown1' : [0x0, ['unsigned long']],
+        'Unknown2' : [0x4, ['unsigned long']],
+        'LastModified' : [0x8, ['WinTimeStamp', dict(is_utc = True)]],
+        'BlobSize' : [0x10, ['unsigned long']],
+        'BlobBuffer' : [0x14, ['unsigned long']],
+    } ],
+}
+
+shimcache_win10_x64 = {
+    'SHIM_CACHE_ENTRY' : [ None, {
+        'ListEntry' : [0x0, ['_LIST_ENTRY']],
+        'Unknown1' : [ 0x10, ['unsigned long long']],
+        'Path' : [ 0x18, ['_UNICODE_STRING']],
+        'ListEntryDetail' : [ 0x28, ['pointer', ['SHIM_CACHE_ENTRY_DETAIL']]],
+    } ],
+}
+
+shimcache_win10_x64_detail = {
+    'SHIM_CACHE_ENTRY_DETAIL' : [ None, {
+        'Unknown1' : [ 0x0, ['unsigned long long']],
+        'LastModified' : [0x08, ['WinTimeStamp', dict(is_utc = True)]],
+        'BlobSize' : [0x10, ['unsigned long']],
+        'Unknown2' : [0x14, ['unsigned long']],
+        'BlobBuffer' : [0x18, ['unsigned long long']],
+    } ],
+}
+
+#######################################
+# Override objects
+#######################################
 shimcache_objs_x86 = {
     # explicitly define _RTL_BALANCED_LINKS and _RTL_AVL_TABLE as they are not
     # present in all OS platform overlays (e.g., 2003 x64)
@@ -300,8 +344,8 @@ class ShimCacheEntry(obj.CType):
             return None
 
     def get_last_modified(self):
-        """Windows 8 stores the last modified in a ListEntry attribute,
-           where as all other versions store it as an attribute of the
+        """Windows 8 & 10 store the last modified in a ListEntry attribute, 
+           where as all other versions store it as an attribute of the 
            ShimCacheEntry object."""
         if hasattr(self, 'ListEntryDetail'):
             return self.ListEntryDetail.LastModified
@@ -338,11 +382,13 @@ class ShimCacheEntry(obj.CType):
     def get_exec_flag(self):
         """Checks if InsertFlags fields has been bitwise OR'd with a value of 2.
            This behavior was observed when processes are created by CSRSS."""
+           
         exec_flag = ''
         if hasattr(self, 'ListEntryDetail') and hasattr(self.ListEntryDetail, 'InsertFlags'):
             exec_flag = self.ListEntryDetail.InsertFlags & 0x2 == 2
         elif hasattr(self, 'InsertFlags'):
             exec_flag = self.InsertFlags & 0x2 == 2
+            
         return exec_flag
 
     def __str__(self):
@@ -483,19 +529,19 @@ class _ERESOURCE(obj.CType):
     def is_valid(self):
         """Validate that the ERESOURCE object's LIST_ENTRY pointer are valid
            and that the SharedWaiters fields are 0"""
-
+        
         if not obj.CType.is_valid(self):
             debug.debug("Invalid _ERESOURCE candidate at 0x{0:08x}".format(self.v()))
             return False
 
         if (self.SystemResourcesList.Flink != None and
-            self.SystemResourcesList.Blink != None and
+            self.SystemResourcesList.Blink != None and 
             self.SystemResourcesList.Blink.v() != self.SystemResourcesList.Flink.v() and
             self.SystemResourcesList.Flink.Blink == self.v() and
             self.SystemResourcesList.Blink.Flink == self.v() and
-            self.SharedWaiters == 0 and
-            self.NumberOfSharedWaiters == 0):
-
+            self.NumberOfSharedWaiters == 0 and
+            (self.SharedWaiters == 0 or self.SharedWaiters.dereference_as("_KSEMAPHORE").is_valid())):
+            
             debug.debug("_ERESOURCE candidate found at 0x{0:08x} (v) 0x{1:08x} (p)".format(self.v(), self.obj_vm.vtop(self.obj_offset)))
             debug.debug("\tSystemResourcesList.Flink       (0x{0:08x}) = 0x{1:08x}".format(self.SystemResourcesList.Flink, self.SystemResourcesList.Flink.dereference().obj_offset))
             debug.debug("\tSystemResourcesList.Blink       (0x{0:08x}) = 0x{1:08x}".format(self.SystemResourcesList.Blink, self.SystemResourcesList.Blink.dereference().obj_offset))
@@ -503,7 +549,6 @@ class _ERESOURCE(obj.CType):
             debug.debug("\tSystemResourcesList.Blink.Flink (0x{0:08x}) = 0x{1:08x}".format(self.SystemResourcesList.Blink.Flink, self.SystemResourcesList.Blink.Flink.dereference().obj_offset))
             debug.debug("\tSharedWaiters                   = 0x{0:08x}".format(self.SharedWaiters))
             debug.debug("\tNumberOfSharedWaiters           = {0:d}".format(self.NumberOfSharedWaiters))
-
             return True
 
         debug.debug("Invalid _ERESOURCE candidate at  0x{0:08x} (v) 0x{1:08x} (p)".format(self.v(), self.obj_vm.vtop(self.obj_offset)))
@@ -515,7 +560,7 @@ class _ERESOURCE(obj.CType):
 class ShimCacheHandle(obj.CType):
     """A Shim cache handle consists of two sequential pointers: the first to an
        ERESOURCE object and the second to an RTL_AVL_TABLE object. The shim
-       cache handle is used on Windows 8 platforms."""
+       cache handle is used on Windows 8 & 10 platforms."""
 
     def __init__(self, *args, **kwargs):
         # used to store a pointer to the head of the shim cache LRU list; this
@@ -558,7 +603,7 @@ class ShimCacheHandle(obj.CType):
         return False
 
 ###############################################################################
-# Profile Modifications (borrowed from plugins/registry/shimcache.py)
+# x86 Profile Modifications (borrowed from plugins/registry/shimcache.py)
 ###############################################################################
 class ShimCacheEntryTypeXPSP2x86(obj.ProfileModification):
     """A shimcache entry on Windows XP SP2 (x86)"""
@@ -625,6 +670,20 @@ class ShimCacheEntryTypeWin8x86(obj.ProfileModification):
         profile.vtypes.update(shimcache_win8_x86)
         profile.vtypes.update(shimcache_win8_x86_detail)
 
+class ShimCacheEntryTypeWin10x86(obj.ProfileModification):
+    """A shimcache entry on Windows 10 (x86)"""
+    before = ['WindowsObjectClasses']
+    conditions = {'os': lambda x: x == 'windows',
+                  'major': lambda x: x == 6,
+                  'minor': lambda x: x == 4,
+                  'memory_model': lambda x: x == '32bit'}
+    def modification(self, profile):
+        profile.vtypes.update(shimcache_win10_x86)
+        profile.vtypes.update(shimcache_win10_x86_detail)
+
+###############################################################################
+# x64 Profile Modifications (borrowed from plugins/registry/shimcache.py)
+###############################################################################
 class ShimCacheEntryType2003x64(obj.ProfileModification):
     """A shimcache entry on Windows Server 2003 (x64)"""
     before = ['WindowsObjectClasses']
@@ -665,6 +724,17 @@ class ShimCacheEntryTypeWin8x64(obj.ProfileModification):
     def modification(self, profile):
         profile.vtypes.update(shimcache_win8_x64)
         profile.vtypes.update(shimcache_win8_x64_detail)
+
+class ShimCacheEntryTypeWin10x64(obj.ProfileModification):
+    """A shimcache entry on Windows 10 (x64)"""
+    before = ['WindowsObjectClasses']
+    conditions = {'os': lambda x: x == 'windows',
+                  'major': lambda x: x == 6,
+                  'minor': lambda x: x == 4,
+                  'memory_model': lambda x: x == '64bit'}
+    def modification(self, profile):
+        profile.vtypes.update(shimcache_win10_x64)
+        profile.vtypes.update(shimcache_win10_x64_detail)
 
 class ShimCachex86(obj.ProfileModification):
     """The shimcache on x86 platforms"""
@@ -720,7 +790,7 @@ class ShimCacheMem(common.AbstractWindowsCommand):
         config.add_option("CLEAN_FILE_PATHS",
                           short_option = 'c',
                           default = False,
-                          help = "Replaces 'SYSVOL' with 'C:\' and strips UNC paths; provided as a convenience for analysts",
+                          help = "Replaces 'SYSVOL' with 'C:\' and strips UNC\Unicode paths; provided as a convenience for analysts",
                           action = "store_true")
 
         config.add_option("PRINT_OFFSETS",
@@ -729,6 +799,12 @@ class ShimCacheMem(common.AbstractWindowsCommand):
                           help = "Print virtual and physical offsets of each shim cache entry \
                             (intended for debug/analysis of raw memory images). \
                             Only available in 'text' output.",
+                          action = "store_true")
+
+        config.add_option("IGNORE_WIN_APPS", 
+                          short_option = 'i', 
+                          default = False,
+                          help = "Excludes Windows App entries (Windows 10 only)", 
                           action = "store_true")
 
         # TODO: pull system/computer name out of the registry instead of asking
@@ -961,12 +1037,12 @@ class ShimCacheMem(common.AbstractWindowsCommand):
            and 8.1. Returns up to two shim caches. On Windows 8+, there are two
            caches, though only one is relevent to the shim cache. The algorithm
            is as follows:
-
+           
            1) Find the ntoskrnl.exe (Windows 8) or ahcache.sys (Windows 8.1) 
               module's .data and PAGE sections
            2) Iterate over every 4/8 bytes (depending on OS bitness) in the 
-              .data section and validate that offset is a pointer to a shim
-              cache handle that consists of:
+              .data section and test for the following:
+              a) offset is a pointer to a handle, consisting of two pointers:
                  i) pointer to an RTL_AVL_TABLE object
                  ii) pointer to an ERESOURCE object
         """
@@ -1094,9 +1170,9 @@ class ShimCacheMem(common.AbstractWindowsCommand):
         # pointer to the head of the shim cache LRU list
         shim_cache_head = None
 
-        # plugin currently supports XP x86 (5.1) - Windows 8.1/Server 2012 R2 (6.3)
-        if (os_vsn_maj, os_vsn_min) not in [(5,1),(5,2),(6,0),(6,1),(6,2),(6,3),]:
-            debug.error("Plugin does not support Windows {0}.{1}. Plugin supports 5.1 (XP) - 6.3 (Windows 8.1 / Server 2012 R2)".format(os_vsn_maj, os_vsn_min))
+        # plugin currently supports XP x86 (5.1) - Windows 10 (6.4)
+        if (os_vsn_maj, os_vsn_min) not in [(5,1),(5,2),(6,0),(6,1),(6,2),(6,3),(6,4)]:
+            debug.error("Plugin does not support Windows {0}.{1}. Plugin supports 5.1 (XP) - 6.4 (Windows 10)".format(os_vsn_maj, os_vsn_min))
             return
 
         ####################################
@@ -1113,7 +1189,7 @@ class ShimCacheMem(common.AbstractWindowsCommand):
                            shim_entry.get_file_size(),
                            shim_entry.get_last_modified(),
                            shim_entry.get_last_update(),
-                           None,                           #exec flag not present on XP
+                           '',                              #exec flag not present on XP
                            shim_entry.obj_offset,
                            shim_entry.obj_vm.vtop(shim_entry.obj_offset))
                 debug.debug("Shimcache parsed with {0:d} entries".format(len(shim_cache_list)))
@@ -1126,21 +1202,21 @@ class ShimCacheMem(common.AbstractWindowsCommand):
             shim_cache_head = self.find_shim_win_2k3(addr_space)
 
         ####################################
-        #Windows 8/2012, 8.1/2012R2
+        #Windows 8/2012, 8.1/2012R2, 10
         ####################################
         elif (os_vsn_maj == 6 and os_vsn_min >= 2):
             if os_vsn_min == 2:
                 # two sequential caches exist on Windows 8+; on Windows 8 x64, the
-                # first cache contains the shim cache. On Windows 8 x86 and
-                # Windows 8.1 x86/x64, the second cache contains the shim cache
+                # first cache contains the shim cache. On Windows 8 x86, 8.1 x86/x64, 
+                # and 10, the second cache contains the shim cache
                 shim_cache_list = self.find_shim_win_8(addr_space, self.NT_KRNL_MODS)
                 if memory_model == '64bit':
                     shim_cache_head = shim_cache_list[0]
                 else:
                     shim_cache_head = shim_cache_list[1]
 
-            elif os_vsn_min == 3:
-                # On Windows 8.1, the second cache is the relevent shim cache
+            elif os_vsn_min in (3, 4):
+                # On Windows 8.1 & 10, the second cache is the relevent shim cache
                 _, shim_cache_head = self.find_shim_win_8(addr_space, ["ahcache.sys"])
 
         # if shim cache was found, iterate through the results
@@ -1201,7 +1277,12 @@ class ShimCacheMem(common.AbstractWindowsCommand):
 
             # clean-up paths; intended as a convenience for analysts
             if self._config.CLEAN_FILE_PATHS:
-                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","")
+                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","").replace("\\\\?\\","")
+
+            # exclude Windows App entries (Windows 10 only)
+            if self._config.IGNORE_WIN_APPS:
+                if last_modified == 0 and file_path[0] == '0':
+                    continue
 
             # explicit format conversion is required here due to a bug in
             # WinTimeStamp.__format__ that prevents providing a custom format
@@ -1210,7 +1291,7 @@ class ShimCacheMem(common.AbstractWindowsCommand):
 
             # only set execution flag if a value exists
             exec_flag_str = ''
-            if exec_flag is not None:
+            if exec_flag in (0,1):
                 exec_flag_str = 'True' if exec_flag == 1 else 'False'
 
             # last update is only available on Windows XP
@@ -1272,7 +1353,12 @@ class ShimCacheMem(common.AbstractWindowsCommand):
 
             # clean-up paths; intended as a convenience for analysts
             if self._config.CLEAN_FILE_PATHS:
-                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","")
+                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","").replace("\\\\?\\","")
+
+            # exclude Windows App entries (Windows 10 only)
+            if self._config.IGNORE_WIN_APPS:
+                if last_modified == 0 and file_path[0] == '0':
+                    continue
 
             # explicit format conversion is required here due to a bug in
             # WinTimeStamp.__format__ that prevents providing a custom format
@@ -1281,7 +1367,7 @@ class ShimCacheMem(common.AbstractWindowsCommand):
 
             # only set execution flag if a value exists
             exec_flag_str = ''
-            if exec_flag is not None:
+            if exec_flag in (0,1):
                 exec_flag_str = 'True' if exec_flag == 1 else 'False'
 
             # last update is only available on Windows XP
