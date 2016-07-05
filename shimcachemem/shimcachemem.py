@@ -549,8 +549,8 @@ class ShimCacheHandle(obj.CType):
 
                 if shim_cache_head.is_valid():
                     debug.info("Shimcache found at 0x{0:08x}".format(shim_cache_head))
-                    debug.info("\t_RTL_AVL_TABLE:  0x{0:08x} 0x{1:08x}".format(rtl_avl_table, rtl_avl_table.obj_vm.vtop(rtl_avl_table.obj_offset)))
-                    debug.info("\tSHIM_CACHE:      0x{0:08x} 0x{1:08x}".format(shim_cache_head, shim_cache_head.obj_vm.vtop(shim_cache_head.obj_offset)))
+                    debug.debug("\t_RTL_AVL_TABLE:  0x{0:08x} 0x{1:08x}".format(rtl_avl_table, rtl_avl_table.obj_vm.vtop(rtl_avl_table.obj_offset)))
+                    debug.debug("\tSHIM_CACHE:      0x{0:08x} 0x{1:08x}".format(shim_cache_head, shim_cache_head.obj_vm.vtop(shim_cache_head.obj_offset)))
                     self.shim_cache_head = shim_cache_head
                     return True
 
@@ -731,9 +731,9 @@ class ShimCacheMem(common.AbstractWindowsCommand):
                             Only available in 'text' output.",
                           action = "store_true")
 
-        config.add_option("MACHINE",
+        config.add_option("SYSTEM_NAME",
                           default = "",
-                          help = "Machine name to add to timeline header (Only when --print_offsets is not selected)")
+                          help = "System name to add to timeline header (only when --print_offsets is not selected)")
 
         # used to track eresource object sizes depending on platform bitness
         self.eresource_sz = None
@@ -960,15 +960,13 @@ class ShimCacheMem(common.AbstractWindowsCommand):
            caches, though only one is relevent to the shim cache. The algorithm
            is as follows:
 
-           1) Find the ahcache kernel module's .data and PAGE sections
-           2) Iterate over every 4/8 bytes (depending on OS bitness) in the
-              .data section and test for the following:
-              a) offset is a pointer to a handle, consisting of two pointers:
+           1) Find the ntoskrnl.exe (Windows 8) or ahcache.sys (Windows 8.1) 
+              module's .data and PAGE sections
+           2) Iterate over every 4/8 bytes (depending on OS bitness) in the 
+              .data section and validate that offset is a pointer to a shim
+              cache handle that consists of:
                  i) pointer to an RTL_AVL_TABLE object
                  ii) pointer to an ERESOURCE object
-
-              b) RTL_AVL_TABLE is preceeded by an ERESOURCE object
-              c) RTL_AVL_TABLE is followed by the beginning of the SHIM LRU list
         """
         data_sec_offset, data_sec_size = self.get_module_section_range(addr_space, module_list, ".data")
         mod_page_offset, mod_page_size = self.get_module_section_range(addr_space, module_list, "PAGE")
@@ -1069,8 +1067,8 @@ class ShimCacheMem(common.AbstractWindowsCommand):
     def calculate(self):
         """Find and dump the shimcache from memory"""
 
-        if self._config.MACHINE != "":
-            self._config.update("MACHINE", "{0}".format(self._config.MACHINE))
+        if self._config.SYSTEM_NAME != "":
+            self._config.update("SYSTEM_NAME", str(self._config.SYSTEM_NAME))
 
         debug.debug("Shimcache Memory Dump")
 
@@ -1107,8 +1105,9 @@ class ShimCacheMem(common.AbstractWindowsCommand):
             if shim_cache_list is None:
                 debug.error("XP shim cache not found")
             else:
-                for shim_entry in shim_cache_list:
-                    yield (shim_entry.get_file_path(),
+                for sequence, shim_entry in enumerate(shim_cache_list, start=1):
+                    yield (sequence,
+                           shim_entry.get_file_path(),
                            shim_entry.get_file_size(),
                            shim_entry.get_last_modified(),
                            shim_entry.get_last_update(),
@@ -1146,12 +1145,10 @@ class ShimCacheMem(common.AbstractWindowsCommand):
         if shim_cache_head:
             debug.debug("Shimcache found at 0x{0:08x}".format(shim_cache_head.obj_offset))
 
-            num_entries = 0
-            for shim_entry in shim_cache_head.ListEntry.list_of_type("SHIM_CACHE_ENTRY", "ListEntry"):
-                num_entries += 1
+            for sequence, shim_entry in enumerate(shim_cache_head.ListEntry.list_of_type("SHIM_CACHE_ENTRY", "ListEntry"), start=1):
 
                 if shim_entry.ListEntry.Flink.Blink != shim_entry.ListEntry.Flink.Blink.dereference().obj_offset:
-                    debug.warning("Invalid list entry pointer in shimcache entry {0} at 0x{1:08x} (0x{2:08x}); subsequent entries are likely invalid".format(num_entries, shim_entry.ListEntry, shim_entry.obj_vm.vtop(shim_entry.obj_offset)))
+                    debug.warning("Invalid list entry pointer in shimcache entry {0} at 0x{1:08x} (0x{2:08x}); subsequent entries are likely invalid".format(sequence, shim_entry.ListEntry, shim_entry.obj_vm.vtop(shim_entry.obj_offset)))
                     debug.warning(shim_entry)
 
                 # last item in the shim cache is empty
@@ -1159,14 +1156,16 @@ class ShimCacheMem(common.AbstractWindowsCommand):
                     debug.debug("End of shim cache list")
                     break
 
-                yield (shim_entry.get_file_path(),
+                yield (sequence,
+                       shim_entry.get_file_path(),
                        shim_entry.get_file_size(),
                        shim_entry.get_last_modified(),
                        None,                            #last update only present on XP
                        shim_entry.get_exec_flag(),
                        shim_entry.obj_offset,
                        shim_entry.obj_vm.vtop(shim_entry.obj_offset))
-            debug.debug("Shimcache parsed with {0:d} entries".format(num_entries))
+
+            debug.debug("Shimcache parsed with {0:d} entries".format(sequence))
         else:
             debug.error("Shimcache not found")
 
@@ -1178,18 +1177,16 @@ class ShimCacheMem(common.AbstractWindowsCommand):
     def unified_output(self, data):
         """This standardizes the output formatting"""
 
-        row = [
-                ("Order", str),
-                ("Last Modified", str),
-                ("Last Update", str),
-                ("Exec Flag", str),
-                ("File Size", str),
-            ]
+        row = [("Order", int),
+               ("Last Modified", str),
+               ("Last Update", str),
+               ("Exec Flag", str),
+               ("File Size", str), # str so that 'None' can be used
+               ("File Path", str),
+              ]
 
-        if self._config.MACHINE:
-            row = row + [("System Name", str), ("File Path", str)]
-        else:
-            row.append(("File Path", str))
+        if self._config.SYSTEM_NAME:
+            row.insert(0, ("System Name", str))
 
         return TreeGrid(row, self.generator(data))
 
@@ -1197,107 +1194,123 @@ class ShimCacheMem(common.AbstractWindowsCommand):
         """This yields data according to the unified output format"""
 
         time_fmt = '%Y-%m-%d %H:%M:%S'
-        seq = 0
 
-        for file_path, file_size, last_modified, last_update, exec_flag, offset_virtual, offset_physical in data:
-            seq += 1
+        for sequence, file_path, file_size, last_modified, last_update, exec_flag, offset_virtual, offset_physical in data:
 
             # clean-up paths; intended as a convenience for analysts
             if self._config.CLEAN_FILE_PATHS:
                 file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","")
 
-            #explicit format conversion is required here due to a bug in
-            #WinTimeStamp.__format__ that prevents providing a custom format
-            #specification to WinTimeStamp.format()
+            # explicit format conversion is required here due to a bug in
+            # WinTimeStamp.__format__ that prevents providing a custom format
+            # specification to WinTimeStamp.format()
             last_modified_str = last_modified.as_datetime().strftime(time_fmt) or ''
 
-            file_size = file_size or ''
-
-            #only set execution flag if a value exists
+            # only set execution flag if a value exists
             exec_flag_str = ''
             if exec_flag is not None:
                 exec_flag_str = 'True' if exec_flag == 1 else 'False'
 
-            #last update is only set on Windows XP
+            # last update is only available on Windows XP
             last_update_str = ''
             if last_update is not None:
                 last_update_str = last_update.as_datetime().strftime(time_fmt) or ''
 
-            row = ['{0}'.format(seq), last_modified_str, last_update_str, exec_flag_str, file_size]
-            if self._config.MACHINE:
-                row = row + [self._config.MACHINE, file_path]
-            else:
-                row.append(file_path)
+            row = [sequence, 
+                   last_modified_str, 
+                   last_update_str, 
+                   exec_flag_str, 
+                   str(file_size or ''),
+                   str(file_path),]
+
+            if self._config.SYSTEM_NAME:
+                row.insert(0, self._config.SYSTEM_NAME)
 
             yield (0, row)
 
-    def render_text(self, outfd, data):
+    def render_csv(self, outfd, data):
+        """Renders the ShimCache entries as CSV"""
+        self.render_text(outfd, data, delim=',')
+    
+    def render_text(self, outfd, data, delim=None):
         """Renders the ShimCache entries as text"""
 
-        normal_headers = [
-                            ("Order", "5"),
-                            ("Last Modified", "21"),
-                            ("Last Update", "21"),
-                            ("Exec Flag", "10"),
-                            ("File Size", "10"),
-                        ]
-
-        offset_headers = [
-                            ("Order", "5"),
-                            ("Offset (v)", "18"),
-                            ("Offset (p)", "10"),
-                            ("File Path", ""),
-                        ]
-
         time_fmt = '%Y-%m-%d %H:%M:%S'
-        seq = 0
 
-        for file_path, file_size, last_modified, last_update, exec_flag, offset_virtual, offset_physical in data:
-            seq += 1
+        tbl_hdr = [("Order", "5"),
+                   ("Last Modified", "21"),
+                   ("Last Update", "21"),
+                   ("Exec Flag", "10"),
+                   ("File Size", "10"),
+                   ("File Path", "")]
 
+        row_fmt = '{0:5} {1:21} {2:21} {3:10} {4:10} {5}\n'
+
+        # if system name is included update header and row format
+        if self._config.SYSTEM_NAME:
+            tbl_hdr.insert(0, ("System Name", "15"))
+            row_fmt = '{0:15} {1:5} {2:21} {3:21} {4:10} {5:10} {6}\n'
+
+        # override normal output and print virtual/physical offsets instead
+        if self._config.PRINT_OFFSETS:
+            tbl_hdr = [("Order", "5"),
+                       ("Offset (v)", "18"),
+                       ("Offset (p)", "10"),
+                       ("File Path", ""),]
+            row_fmt = '{0:5} 0x{1:010x} 0x{2:08x} {3}\n'
+
+        # check if a delimiter was specified (provides code reuse for CSV option)
+        if delim:
+            outfd.write("{}\n".format(delim.join(x[0] for x in tbl_hdr)))
+        else:
+            self.table_header(outfd, tbl_hdr)
+
+        # loop over data and write out
+        for sequence, file_path, file_size, last_modified, last_update, exec_flag, offset_virtual, offset_physical in data:
+
+            # clean-up paths; intended as a convenience for analysts
+            if self._config.CLEAN_FILE_PATHS:
+                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","")
+
+            # explicit format conversion is required here due to a bug in
+            # WinTimeStamp.__format__ that prevents providing a custom format
+            # specification to WinTimeStamp.format()
             last_modified_str = last_modified.as_datetime().strftime(time_fmt) or ''
 
-            last_update_str = ''
-            if last_update is not None:
-                last_update_str = last_update.as_datetime().strftime(time_fmt) or ''
-
-            file_size = file_size or ''
-
+            # only set execution flag if a value exists
             exec_flag_str = ''
             if exec_flag is not None:
                 exec_flag_str = 'True' if exec_flag == 1 else 'False'
 
-            if self._config.CLEAN_FILE_PATHS:
-                file_path = file_path.replace("SYSVOL", "C:").replace("\\??\\","")
+            # last update is only available on Windows XP
+            last_update_str = ''
+            if last_update is not None:
+                last_update_str = last_update.as_datetime().strftime(time_fmt) or ''
 
+            # override standard output and print virtual/physical offsets instead
             if self._config.PRINT_OFFSETS:
-                offset_row = '{0:5} 0x{1:010x} 0x{2:08x} {3}'.format(
-                                    seq,
-                                    offset_virtual,
-                                    offset_physical,
-                                    file_path,
-                                )
-
-                if seq == 1:
-                    self.table_header(outfd, offset_headers)
-                outfd.write(offset_row + '\n')
+                outfd.write(row_fmt.format(
+                             sequence,
+                             offset_virtual,
+                             offset_physical,
+                             file_path,
+                           ))
                 continue
 
-            normal_row = '{0:5} {1:21} {2:21} {3:10} {4:10}'.format(
-                                seq,
-                                last_modified_str,
-                                last_update_str,
-                                exec_flag_str,
-                                file_size,
-                            )
+            # print row data
+            row_flds = [sequence,
+                        last_modified_str,
+                        last_update_str,
+                        exec_flag_str,
+                        file_size or '',
+                        file_path,
+                       ]
+                      
+            # optionally prepend system name
+            if self._config.SYSTEM_NAME:
+                row_flds.insert(0, self._config.SYSTEM_NAME)
 
-            if self._config.MACHINE:
-                normal_headers = normal_headers + [("System Name", "15"), ("File Path", "")]
-                normal_row = normal_row + ' {0:15} {1}'.format(self._config.MACHINE, file_path)
+            if delim:
+                outfd.write("{}\n".format(delim.join(str(x) for x in row_flds)))
             else:
-                normal_headers.append(("File Path", ""))
-                normal_row = normal_row + ' {0}'.format(file_path)
-
-            if seq == 1:
-                self.table_header(outfd, normal_headers)
-            outfd.write(normal_row +'\n')
+                outfd.write(row_fmt.format(*row_flds))
